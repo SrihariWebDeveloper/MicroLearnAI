@@ -1,0 +1,7 @@
+services:
+  backend:
+    volumes:
+      - type: bind
+        source: ${SANDBOX_CERTS_DIR:?Set the directory containing ca.pem, cert.pem, and key.pem}
+        target: /run/secrets/sandbox-certs
+        read_only: true

@@ -1,0 +1,72 @@
+services:
+  mongodb:
+    image: mongo:8.0
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Set MongoDB root username}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Set MongoDB root password}
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - private
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      PORT: 5000
+      SECRET_KEY: ${SECRET_KEY:?Set a unique Flask secret}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set a separate JWT secret}
+      JWT_ACCESS_TOKEN_EXPIRES_DAYS: ${JWT_ACCESS_TOKEN_EXPIRES_DAYS:-1}
+      ALLOW_IN_MEMORY_DB: "false"
+      CORS_ORIGINS: ${PUBLIC_ORIGIN:?Set the public frontend origin}
+      MONGO_URI: ${MONGO_URI:?Set an authenticated MongoDB URI}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/free}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      CODE_SANDBOX_IMAGE: ${CODE_SANDBOX_IMAGE:-python:3.12.8-alpine3.21@sha256:ba13ef990f6e5d13014e9e8d04c02a8fdb0fe53d6dccf6e19147f316e6cc3a84}
+      DOCKER_HOST: ${SANDBOX_DOCKER_HOST:-}
+      DOCKER_TLS_VERIFY: ${SANDBOX_DOCKER_TLS_VERIFY:-}
+      DOCKER_CERT_PATH: /run/secrets/sandbox-certs
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - private
+      - outbound
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - backend
+    networks:
+      - private
+
+volumes:
+  mongo_data:
+
+networks:
+  private:
+    internal: true
+  outbound: {}
